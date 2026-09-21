@@ -1,10 +1,10 @@
-import base64
 import io
 import time
 
 import numpy as np
 import soundfile as sf
 import streamlit as st
+from audio_recorder_streamlit import audio_recorder
 
 from audio.preprocessor import preprocess_audio
 from audio.spectrogram import compute_spectrogram
@@ -14,90 +14,29 @@ from recognition.matcher import find_best_match
 import config
 
 # --------------------------------------------------------------------------
-# Icons (hand-drawn inline SVGs — no emoji, no external icon font dependency)
+# Icons — hand-drawn inline SVGs, no emoji
 # --------------------------------------------------------------------------
 
-ICON_LOGO = """
-<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-     stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M4 14 L4 10" /><path d="M8 17 L8 7" />
-  <path d="M12 20 L12 4" /><path d="M16 17 L16 7" />
-  <path d="M20 14 L20 10" />
-</svg>
-"""
+ICON_LOGO = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 14 L4 10"/><path d="M8 17 L8 7"/><path d="M12 20 L12 4"/><path d="M16 17 L16 7"/><path d="M20 14 L20 10"/></svg>'
+ICON_CHECK = '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M8 12.3 L10.8 15 L16 9.3"/></svg>'
+ICON_ALERT = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><line x1="12" y1="7.5" x2="12" y2="13"/><circle cx="12" cy="16.3" r="0.9" fill="currentColor" stroke="none"/></svg>'
+ICON_ARTIST = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>'
+ICON_ALBUM = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="2.3" fill="currentColor" stroke="none"/></svg>'
+ICON_CLOCK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 7 L12 12 L15.5 14"/></svg>'
 
-ICON_MIC = """
-<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-     stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-  <rect x="9" y="2" width="6" height="12" rx="3" />
-  <path d="M5 11a7 7 0 0 0 14 0" />
-  <line x1="12" y1="18" x2="12" y2="22" />
-  <line x1="8" y1="22" x2="16" y2="22" />
-</svg>
-"""
-
-ICON_CHECK = """
-<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="12" cy="12" r="9.5" />
-  <path d="M8 12.3 L10.8 15 L16 9.3" />
-</svg>
-"""
-
-ICON_ALERT = """
-<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="12" cy="12" r="9.5" />
-  <line x1="12" y1="7.5" x2="12" y2="13" />
-  <circle cx="12" cy="16.3" r="0.9" fill="currentColor" stroke="none" />
-</svg>
-"""
-
-ICON_ARTIST = """
-<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="12" cy="8" r="3.4" />
-  <path d="M5.5 20a6.5 6.5 0 0 1 13 0" />
-</svg>
-"""
-
-ICON_ALBUM = """
-<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="12" cy="12" r="9.5" />
-  <circle cx="12" cy="12" r="2.3" fill="currentColor" stroke="none" />
-</svg>
-"""
-
-ICON_CLOCK = """
-<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="12" cy="12" r="9.5" />
-  <path d="M12 7 L12 12 L15.5 14" />
-</svg>
-"""
-
-
-def _favicon_data_uri() -> str:
-    """Build the browser tab icon from the same mark used in the header — no emoji."""
-    svg = (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" '
-        'fill="none" stroke="%23EDEBFF" stroke-width="2" stroke-linecap="round">'
-        '<rect width="24" height="24" rx="6" fill="%236C5CE7"/>'
-        '<path d="M6 14V10M9.5 17V7M13 19V5M16.5 17V7M20 14V10" '
-        'stroke="white" stroke-width="1.6"/></svg>'
-    )
-    return "data:image/svg+xml," + svg
-
-
-st.set_page_config(
-    page_title="Sonic — Song Recognition",
-    page_icon=_favicon_data_uri(),
-    layout="centered",
+# Shazam-style blue, used as the browser tab icon
+_FAVICON = (
+    "data:image/svg+xml,"
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+    '<rect width="24" height="24" rx="6" fill="%230396FF"/>'
+    '<path d="M6 14V10M9.5 17V7M13 19V5M16.5 17V7M20 14V10" '
+    'stroke="white" stroke-width="1.6" stroke-linecap="round"/></svg>'
 )
 
+st.set_page_config(page_title="Mini-Shazam", page_icon=_FAVICON, layout="centered")
+
 # --------------------------------------------------------------------------
-# Styling
+# Styling — Shazam blue on near-black, kept deliberately simple
 # --------------------------------------------------------------------------
 
 st.markdown(
@@ -106,153 +45,60 @@ st.markdown(
     @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap');
 
     #MainMenu, footer, header { visibility: hidden; }
-
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 
     .stApp {
         background:
-            radial-gradient(ellipse 900px 500px at 50% -10%, rgba(108,92,231,0.20), transparent 60%),
-            #05060B;
-        color: #EDEDF5;
+            radial-gradient(ellipse 800px 460px at 50% -8%, rgba(3,150,255,0.16), transparent 60%),
+            #05070C;
+        color: #EDEFF5;
     }
+    .block-container { padding-top: 3.4rem; max-width: 560px; }
 
-    .block-container { padding-top: 3.5rem; max-width: 640px; }
+    .brand-row { display: flex; align-items: center; justify-content: center; gap: 0.55rem; margin-bottom: 0.1rem; }
+    .brand-row svg { color: #4FC3FF; }
+    .brand-title { font-family: 'Space Grotesk', sans-serif; font-size: 1.6rem; font-weight: 700; color: #F5F7FF; margin: 0; }
+    .brand-sub { text-align: center; color: #7C8398; font-size: 0.92rem; margin: 0.1rem 0 2.6rem 0; }
 
-    /* ---------- Header ---------- */
-    .brand-row {
-        display: flex; align-items: center; justify-content: center;
-        gap: 0.6rem; margin-bottom: 0.15rem;
-    }
-    .brand-row svg { color: #8B7CF6; }
-    .brand-title {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 1.7rem; font-weight: 700; letter-spacing: -0.01em;
-        color: #F5F4FF; margin: 0;
-    }
-    .brand-sub {
-        text-align: center; color: #8188A6; font-size: 0.95rem;
-        margin-top: 0.1rem; margin-bottom: 2.4rem;
-    }
-
-    /* ---------- Record shell ---------- */
-    .record-shell {
-        position: relative;
-        width: 220px; height: 220px;
-        margin: 0 auto 0.6rem auto;
-        display: flex; align-items: center; justify-content: center;
-    }
-    .record-ring {
-        position: absolute; border-radius: 50%;
-        border: 1px solid rgba(139,124,246,0.25);
-    }
-    .ring-1 { width: 220px; height: 220px; }
-    .ring-2 { width: 178px; height: 178px; }
-
-    .pulse-ring {
-        position: absolute; border-radius: 50%;
-        border: 1.5px solid rgba(139,124,246,0.55);
-        animation: pulse-out 1.8s cubic-bezier(0.2, 0.7, 0.4, 1) infinite;
-    }
-    .pulse-ring.delay { animation-delay: 0.6s; }
-    @keyframes pulse-out {
-        0%   { width: 130px; height: 130px; opacity: 0.75; }
-        100% { width: 220px; height: 220px; opacity: 0; }
-    }
-
-    .record-core {
-        position: relative; z-index: 2;
-        width: 128px; height: 128px; border-radius: 50%;
-        background: radial-gradient(circle at 35% 30%, #8B7CF6, #6C5CE7 55%, #4B3FB0 100%);
-        box-shadow: 0 8px 28px rgba(108,92,231,0.45), inset 0 1px 1px rgba(255,255,255,0.25);
-        display: flex; align-items: center; justify-content: center;
-        color: #FFFFFF;
-    }
-    .record-core svg { width: 40px; height: 40px; }
+    /* Center the round recorder button and give it breathing room */
+    .recorder-wrap { display: flex; justify-content: center; margin-bottom: 1rem; }
+    .recorder-wrap iframe { margin: 0 auto; }
 
     .record-hint {
-        text-align: center; color: #6E7492; font-size: 0.85rem;
-        margin-top: 1.4rem; margin-bottom: 1.6rem;
-        display: flex; align-items: center; justify-content: center; gap: 0.4rem;
-    }
-    .record-hint svg { color: #6E7492; }
-
-    /* ---------- Native recorder card ----------
-       We do NOT overlay/scale Streamlit's native audio widget onto the
-       decorative circle above — it has its own waveform/play/timer layout
-       that breaks when force-compressed. Instead it gets its own themed
-       card, in normal flow. */
-    div[data-testid="stAudioInput"] {
-        background: rgba(255,255,255,0.035) !important;
-        border: 1px solid rgba(255,255,255,0.08) !important;
-        border-radius: 16px !important;
-        padding: 0.9rem 1.1rem !important;
-        max-width: 460px;
-        margin: 0 auto 0.6rem auto !important;
+        text-align: center; color: #6B7288; font-size: 0.85rem;
+        margin: 0.9rem 0 2.2rem 0;
     }
 
-    /* ---------- Analyzing state ---------- */
-    .analyzing-wrap { display: flex; flex-direction: column; align-items: center; margin: 1.6rem 0 2.2rem 0; }
-    .analyzing-dot-row { display: flex; gap: 8px; margin-bottom: 0.9rem; }
-    .analyzing-dot {
-        width: 9px; height: 9px; border-radius: 50%;
-        background: #8B7CF6; animation: dot-bounce 1s ease-in-out infinite;
-    }
+    .analyzing-wrap { display: flex; flex-direction: column; align-items: center; margin: 1.4rem 0 2rem 0; }
+    .analyzing-dot-row { display: flex; gap: 8px; margin-bottom: 0.85rem; }
+    .analyzing-dot { width: 9px; height: 9px; border-radius: 50%; background: #0396FF; animation: dot-bounce 1s ease-in-out infinite; }
     .analyzing-dot:nth-child(2) { animation-delay: 0.15s; }
     .analyzing-dot:nth-child(3) { animation-delay: 0.3s; }
-    @keyframes dot-bounce {
-        0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-        30% { transform: translateY(-7px); opacity: 1; }
-    }
-    .analyzing-text { color: #9096B5; font-size: 0.92rem; letter-spacing: 0.01em; }
+    @keyframes dot-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.5; } 30% { transform: translateY(-7px); opacity: 1; } }
+    .analyzing-text { color: #8890A8; font-size: 0.9rem; }
 
-    /* ---------- Result card ---------- */
     .result-card {
-        background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.015));
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 20px;
-        padding: 2rem 1.8rem;
-        margin-top: 1.2rem;
-        text-align: center;
+        background: linear-gradient(180deg, rgba(3,150,255,0.06), rgba(255,255,255,0.015));
+        border: 1px solid rgba(3,150,255,0.18);
+        border-radius: 18px; padding: 1.9rem 1.7rem; margin-top: 1rem; text-align: center;
     }
     .result-badge {
-        width: 52px; height: 52px; border-radius: 50%;
-        background: rgba(108,92,231,0.18); color: #9C8CFF;
-        display: flex; align-items: center; justify-content: center;
-        margin: 0 auto 1.1rem auto;
+        width: 48px; height: 48px; border-radius: 50%;
+        background: rgba(3,150,255,0.16); color: #4FC3FF;
+        display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto;
     }
-    .result-title {
-        font-family: 'Space Grotesk', sans-serif;
-        font-size: 1.5rem; font-weight: 700; color: #F7F6FF;
-        margin: 0 0 0.3rem 0; line-height: 1.25;
-    }
-    .result-artist {
-        display: flex; align-items: center; justify-content: center; gap: 0.35rem;
-        color: #A9AEC9; font-size: 1rem; margin-bottom: 1.3rem;
-    }
-    .result-artist svg { color: #7B81A0; }
+    .result-title { font-family: 'Space Grotesk', sans-serif; font-size: 1.4rem; font-weight: 700; color: #F7F8FF; margin: 0 0 0.25rem 0; }
+    .result-artist { display: flex; align-items: center; justify-content: center; gap: 0.35rem; color: #A3AABF; font-size: 0.98rem; margin-bottom: 1.2rem; }
+    .result-artist svg { color: #6E7690; }
+    .result-meta-row { display: flex; align-items: center; justify-content: center; gap: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.07); }
+    .result-meta-item { display: flex; align-items: center; gap: 0.4rem; color: #838BA3; font-size: 0.83rem; }
+    .result-meta-item svg { color: #5E6684; }
+    .result-timing { text-align: center; color: #545C77; font-size: 0.76rem; margin-top: 0.9rem; }
 
-    .result-meta-row {
-        display: flex; align-items: center; justify-content: center;
-        gap: 1.6rem; padding-top: 1.1rem;
-        border-top: 1px solid rgba(255,255,255,0.07);
-    }
-    .result-meta-item {
-        display: flex; align-items: center; gap: 0.4rem;
-        color: #8991B4; font-size: 0.85rem;
-    }
-    .result-meta-item svg { color: #6E749A; }
-
-    .result-timing {
-        text-align: center; color: #5C6284; font-size: 0.78rem; margin-top: 1rem;
-    }
-
-    /* ---------- No-match / alert card ---------- */
     .alert-card {
-        display: flex; align-items: center; gap: 0.9rem;
-        background: rgba(255,255,255,0.03);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 16px; padding: 1.1rem 1.3rem;
-        margin-top: 1.2rem; color: #C6CAE0; font-size: 0.92rem;
+        display: flex; align-items: center; gap: 0.85rem;
+        background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 14px; padding: 1rem 1.2rem; margin-top: 1rem; color: #C6CAE0; font-size: 0.9rem;
     }
     .alert-card svg { color: #E0A96D; flex-shrink: 0; }
     </style>
@@ -265,30 +111,33 @@ st.markdown(
 # --------------------------------------------------------------------------
 
 st.markdown(
-    f'<div class="brand-row">{ICON_LOGO}<p class="brand-title">Sonic</p></div>'
-    f'<p class="brand-sub">Identify any track from your library in seconds</p>',
+    f'<div class="brand-row">{ICON_LOGO}<p class="brand-title">Mini-Shazam</p></div>'
+    f'<p class="brand-sub">Tap to identify what\'s playing</p>',
     unsafe_allow_html=True,
 )
 
 # --------------------------------------------------------------------------
-# Record shell (decorative rings behind the native audio widget)
+# Recorder — a genuine round tap button (audio-recorder-streamlit), not a
+# CSS reshaping of Streamlit's native audio_input. Records for ~7s once
+# tapped, using the package's documented fixed-duration trick
+# (energy_threshold forced so pause_threshold becomes the recording length).
 # --------------------------------------------------------------------------
 
-st.markdown(
-    '<div class="record-shell">'
-    '<div class="record-ring ring-1"></div>'
-    '<div class="record-ring ring-2"></div>'
-    '<div class="pulse-ring"></div>'
-    '<div class="pulse-ring delay"></div>'
-    f'<div class="record-core">{ICON_MIC}</div>'
-    '</div>',
-    unsafe_allow_html=True,
+st.markdown('<div class="recorder-wrap">', unsafe_allow_html=True)
+audio_bytes = audio_recorder(
+    text="",
+    icon_name="microphone",
+    icon_size="4x",
+    neutral_color="#0396FF",
+    recording_color="#FF4B4B",
+    energy_threshold=(-1.0, 1.0),
+    pause_threshold=7.0,
+    sample_rate=44100,
 )
-
-audio_file = st.audio_input("Record", label_visibility="collapsed")
+st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown(
-    f"""<p class="record-hint">{ICON_MIC} Tap the circle and play a 5–7 second clip</p>""",
+    '<p class="record-hint">Tap the button — it listens for 7 seconds, then identifies the track</p>',
     unsafe_allow_html=True,
 )
 
@@ -296,24 +145,19 @@ st.markdown(
 # Processing + result
 # --------------------------------------------------------------------------
 
-if audio_file is not None:
+if audio_bytes is not None and len(audio_bytes) > 0:
     status = st.empty()
     status.markdown(
         '<div class="analyzing-wrap">'
-        '<div class="analyzing-dot-row">'
-        '<div class="analyzing-dot"></div>'
-        '<div class="analyzing-dot"></div>'
-        '<div class="analyzing-dot"></div>'
-        '</div>'
+        '<div class="analyzing-dot-row"><div class="analyzing-dot"></div><div class="analyzing-dot"></div><div class="analyzing-dot"></div></div>'
         '<div class="analyzing-text">Matching fingerprints against your library…</div>'
         '</div>',
         unsafe_allow_html=True,
     )
 
     t0 = time.time()
-    audio_bytes = audio_file.read()
 
-    # 1. Read byte stream to NumPy array
+    # 1. Decode the recorded bytes to a NumPy array
     with io.BytesIO(audio_bytes) as buffer:
         audio_array, native_sr = sf.read(buffer, dtype="float32")
 
@@ -331,9 +175,7 @@ if audio_file is not None:
 
     if not query_hashes:
         st.markdown(
-            f'<div class="alert-card">{ICON_ALERT}'
-            f'<div>No prominent audio peaks detected. Try recording closer to the speaker.</div>'
-            f'</div>',
+            f'<div class="alert-card">{ICON_ALERT}<div>No prominent audio peaks detected. Try recording closer to the speaker.</div></div>',
             unsafe_allow_html=True,
         )
     else:
@@ -347,10 +189,6 @@ if audio_file is not None:
             duration = match.get("duration_sec")
             album = match.get("album")
 
-            # NOTE: every HTML fragment below is built as ONE continuous line.
-            # Streamlit's markdown renderer treats any line starting with
-            # 4+ spaces as a code block, which is what caused the raw
-            # "<div class=...>" text to render literally in the last version.
             meta_items = f'<div class="result-meta-item">{ICON_CLOCK}<span>~{mins:02d}:{secs:02d} cue</span></div>'
             if duration:
                 meta_items += f'<div class="result-meta-item">{ICON_CLOCK}<span>{duration:.0f}s track</span></div>'
@@ -369,8 +207,6 @@ if audio_file is not None:
             st.markdown(result_html, unsafe_allow_html=True)
         else:
             st.markdown(
-                f'<div class="alert-card">{ICON_ALERT}'
-                f'<div>No confident match found. Try playing louder or holding the mic closer.</div>'
-                f'</div>',
+                f'<div class="alert-card">{ICON_ALERT}<div>No confident match found. Try playing louder or holding the mic closer.</div></div>',
                 unsafe_allow_html=True,
             )
