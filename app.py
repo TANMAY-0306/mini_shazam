@@ -24,7 +24,7 @@ FAVICON = (
 )
 
 st.set_page_config(
-    page_title="Sonic ID — Audio Recognition",
+    page_title="Mini Shazam — Audio Recognition",
     page_icon=FAVICON,
     layout="centered",
     initial_sidebar_state="collapsed",
@@ -46,7 +46,7 @@ ICON_LOGO = """
     </linearGradient>
   </defs>
 </svg>
-"""
+""".strip()
 
 ICON_MUSIC_NOTE = """
 <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -54,27 +54,27 @@ ICON_MUSIC_NOTE = """
   <circle cx="6" cy="18" r="3" stroke="#0A84FF" stroke-width="1.7"/>
   <circle cx="17" cy="16" r="3" stroke="#0A84FF" stroke-width="1.7"/>
 </svg>
-"""
+""".strip()
 
 ICON_ARTIST = """
 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
   <circle cx="12" cy="8" r="3.4" stroke="#9FB8D9" stroke-width="1.6"/>
   <path d="M5 20c1.2-3.6 4-5.4 7-5.4s5.8 1.8 7 5.4" stroke="#9FB8D9" stroke-width="1.6" stroke-linecap="round"/>
 </svg>
-"""
+""".strip()
 
 ICON_CLOCK = """
 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
   <circle cx="12" cy="12" r="8.4" stroke="#9FB8D9" stroke-width="1.6"/>
   <path d="M12 7.5V12l3 2" stroke="#9FB8D9" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
-"""
+""".strip()
 
 ICON_PLAY = """
 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
   <path d="M6 4.8v14.4L19 12 6 4.8Z" fill="#9FB8D9"/>
 </svg>
-"""
+""".strip()
 
 ICON_WARNING = """
 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -82,14 +82,14 @@ ICON_WARNING = """
   <path d="M12 9.5v5" stroke="#FFB020" stroke-width="1.6" stroke-linecap="round"/>
   <circle cx="12" cy="17.2" r="0.9" fill="#FFB020"/>
 </svg>
-"""
+""".strip()
 
 ICON_ERROR = """
 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
   <circle cx="12" cy="12" r="9" stroke="#FF5C5C" stroke-width="1.6"/>
   <path d="M9 9l6 6M15 9l-6 6" stroke="#FF5C5C" stroke-width="1.6" stroke-linecap="round"/>
 </svg>
-"""
+""".strip()
 
 # ──────────────────────────────────────────────────────────────────────────
 # GLOBAL STYLE
@@ -105,7 +105,10 @@ st.markdown(
     div[data-testid="stDecoration"] { display: none; }
 
     .stApp {
-        background: radial-gradient(ellipse 120% 80% at 50% -10%, #10306B 0%, #050A16 55%, #030509 100%);
+        background:
+            radial-gradient(ellipse 70% 50% at 12% 105%, rgba(30,210,140,0.20) 0%, rgba(30,210,140,0) 60%),
+            radial-gradient(ellipse 60% 45% at 90% 15%, rgba(20,180,120,0.10) 0%, rgba(20,180,120,0) 60%),
+            radial-gradient(ellipse 120% 80% at 50% -10%, #10306B 0%, #050A16 55%, #030509 100%);
         color: #EAF1FB;
     }
 
@@ -244,7 +247,7 @@ st.markdown(
     f"""
     <div class="app-header">
         <div class="logo-wrap">{ICON_LOGO}</div>
-        <p class="app-title">SONIC&nbsp;ID</p>
+        <p class="app-title">MINI&nbsp;SHAZAM</p>
         <p class="app-subtitle">Identify any track from your indexed catalog — instantly.</p>
     </div>
     """,
@@ -320,7 +323,7 @@ if audio_file is not None:
             result_slot.markdown(
                 f"""
                 <div class="result-card">
-                    <div class="result-tag"><span class="dot"></span>Match found · {elapsed:.2f}s</div>
+                    <div class="result-tag"><span class="dot"></span>Match found</div>
                     <div class="result-header">
                         <div class="result-icon">{ICON_MUSIC_NOTE}</div>
                         <div>
