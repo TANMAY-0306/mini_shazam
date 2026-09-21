@@ -5,3 +5,4 @@ scipy
 soundfile
 psycopg2-binary
 python-dotenv
+audio-recorder-streamlit
