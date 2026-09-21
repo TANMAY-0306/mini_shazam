@@ -23,6 +23,7 @@ ICON_ALERT = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke
 ICON_ARTIST = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>'
 ICON_ALBUM = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="2.3" fill="currentColor" stroke="none"/></svg>'
 ICON_CLOCK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 7 L12 12 L15.5 14"/></svg>'
+ICON_CHECK_SM = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 L9 17.5 L20 6"/></svg>'
 
 # Shazam-style blue, used as the browser tab icon
 _FAVICON = (
@@ -60,22 +61,48 @@ st.markdown(
     .brand-title { font-family: 'Space Grotesk', sans-serif; font-size: 1.6rem; font-weight: 700; color: #F5F7FF; margin: 0; }
     .brand-sub { text-align: center; color: #7C8398; font-size: 0.92rem; margin: 0.1rem 0 2.6rem 0; }
 
-    /* Center the round recorder button and give it breathing room */
-    .recorder-wrap { display: flex; justify-content: center; margin-bottom: 1rem; }
+    /* Recorder button — a fixed halo ring so the button reads as a clear
+       circular target at rest; the icon itself swaps blue -> red while
+       actively recording (that swap is the component's own real-time
+       signal — Streamlit's Python side has no visibility into recording
+       state until the clip is done, so this color change is the only
+       true "is it recording" indicator available). */
+    .recorder-wrap {
+        display: flex; justify-content: center; align-items: center;
+        margin: 0 auto 0.4rem auto;
+        width: 168px; height: 168px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 40% 32%, rgba(3,150,255,0.22), rgba(3,150,255,0.04) 70%);
+        border: 1.5px solid rgba(3,150,255,0.35);
+    }
     .recorder-wrap iframe { margin: 0 auto; }
 
     .record-hint {
         text-align: center; color: #6B7288; font-size: 0.85rem;
-        margin: 0.9rem 0 2.2rem 0;
+        margin: 0.9rem 0 0.4rem 0;
     }
+    .record-hint strong { color: #4FC3FF; font-weight: 600; }
 
-    .analyzing-wrap { display: flex; flex-direction: column; align-items: center; margin: 1.4rem 0 2rem 0; }
-    .analyzing-dot-row { display: flex; gap: 8px; margin-bottom: 0.85rem; }
-    .analyzing-dot { width: 9px; height: 9px; border-radius: 50%; background: #0396FF; animation: dot-bounce 1s ease-in-out infinite; }
-    .analyzing-dot:nth-child(2) { animation-delay: 0.15s; }
-    .analyzing-dot:nth-child(3) { animation-delay: 0.3s; }
-    @keyframes dot-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.5; } 30% { transform: translateY(-7px); opacity: 1; } }
-    .analyzing-text { color: #8890A8; font-size: 0.9rem; }
+    /* ---------- Processing steps ---------- */
+    .proc-list {
+        display: flex; flex-direction: column; gap: 0.65rem;
+        margin: 1.7rem auto 2rem auto; max-width: 340px;
+    }
+    .proc-line { display: flex; align-items: center; gap: 0.65rem; font-size: 0.9rem; }
+    .proc-line.done { color: #C7CCE0; }
+    .proc-line.done svg { color: #0396FF; flex-shrink: 0; }
+    .proc-line.active { color: #F2F4FF; font-weight: 500; }
+    .proc-line.pending { color: #4B5170; }
+    .proc-dot {
+        width: 14px; height: 14px; border-radius: 50%;
+        border: 1.5px solid #3A4160; flex-shrink: 0;
+    }
+    .proc-spinner {
+        width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+        border: 2px solid rgba(3,150,255,0.25); border-top-color: #0396FF;
+        animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
     .result-card {
         background: linear-gradient(180deg, rgba(3,150,255,0.06), rgba(255,255,255,0.015));
@@ -137,7 +164,8 @@ audio_bytes = audio_recorder(
 st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown(
-    '<p class="record-hint">Tap the button — it listens for 7 seconds, then identifies the track</p>',
+    '<p class="record-hint">Tap — the icon turns <strong>red while it\'s listening</strong>, '
+    'for about 7 seconds</p>',
     unsafe_allow_html=True,
 )
 
@@ -145,43 +173,85 @@ st.markdown(
 # Processing + result
 # --------------------------------------------------------------------------
 
+# Each label is a real stage of the actual pipeline below — this is not a
+# fake loading animation, it's the true sequence, with a short pause after
+# each so the eye can register the step (the DSP stages alone often finish
+# in well under a second, too fast to read otherwise).
+PROC_STEPS = [
+    "Clip captured",
+    "Normalizing audio (mono, 44.1kHz)",
+    "Generating spectrogram (FFT)",
+    "Detecting frequency peaks",
+    "Generating fingerprints",
+    "Searching fingerprint database",
+]
+STEP_PAUSE = 0.25
+
+
+def render_steps(done_idx, in_progress=True):
+    """done_idx = number of fully completed steps. The step at that index
+    is shown mid-flight (spinner) if in_progress, else as done too."""
+    lines = ""
+    for i, label in enumerate(PROC_STEPS):
+        if i < done_idx or (i == done_idx and not in_progress):
+            lines += f'<div class="proc-line done">{ICON_CHECK_SM}<span>{label}</span></div>'
+        elif i == done_idx:
+            lines += f'<div class="proc-line active"><div class="proc-spinner"></div><span>{label}</span></div>'
+        else:
+            lines += f'<div class="proc-line pending"><div class="proc-dot"></div><span>{label}</span></div>'
+    return f'<div class="proc-list">{lines}</div>'
+
+
 if audio_bytes is not None and len(audio_bytes) > 0:
     status = st.empty()
-    status.markdown(
-        '<div class="analyzing-wrap">'
-        '<div class="analyzing-dot-row"><div class="analyzing-dot"></div><div class="analyzing-dot"></div><div class="analyzing-dot"></div></div>'
-        '<div class="analyzing-text">Matching fingerprints against your library…</div>'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
     t0 = time.time()
 
-    # 1. Decode the recorded bytes to a NumPy array
+    # Step 0: clip captured (already true the moment we have bytes)
+    status.markdown(render_steps(0, in_progress=False), unsafe_allow_html=True)
+    time.sleep(STEP_PAUSE)
+
+    # Step 1: decode + normalize
+    status.markdown(render_steps(1, in_progress=True), unsafe_allow_html=True)
     with io.BytesIO(audio_bytes) as buffer:
         audio_array, native_sr = sf.read(buffer, dtype="float32")
-
-    # 2. Downmix if multi-channel
     if audio_array.ndim > 1:
         audio_array = np.mean(audio_array, axis=1)
-
-    # 3. DSP pipeline (unchanged)
     mono_audio, final_sr = preprocess_audio(audio_array, orig_sr=native_sr, target_sr=config.TARGET_SR)
-    spec_db = compute_spectrogram(mono_audio, n_fft=config.N_FFT, hop_length=config.HOP_LENGTH)
-    peaks = extract_peaks(spec_db, neighborhood_size=PEAK_NEIGHBORHOOD_SIZE, min_amplitude_db=MIN_AMPLITUDE_DB)
-    query_hashes = generate_hashes(peaks, fan_out=FAN_OUT, min_delta_time=MIN_DELTA_TIME, max_delta_time=MAX_DELTA_TIME)
+    status.markdown(render_steps(1, in_progress=False), unsafe_allow_html=True)
+    time.sleep(STEP_PAUSE)
 
-    status.empty()
+    # Step 2: spectrogram
+    status.markdown(render_steps(2, in_progress=True), unsafe_allow_html=True)
+    spec_db = compute_spectrogram(mono_audio, n_fft=config.N_FFT, hop_length=config.HOP_LENGTH)
+    status.markdown(render_steps(2, in_progress=False), unsafe_allow_html=True)
+    time.sleep(STEP_PAUSE)
+
+    # Step 3: peak detection
+    status.markdown(render_steps(3, in_progress=True), unsafe_allow_html=True)
+    peaks = extract_peaks(spec_db, neighborhood_size=PEAK_NEIGHBORHOOD_SIZE, min_amplitude_db=MIN_AMPLITUDE_DB)
+    status.markdown(render_steps(3, in_progress=False), unsafe_allow_html=True)
+    time.sleep(STEP_PAUSE)
+
+    # Step 4: fingerprint hashing
+    status.markdown(render_steps(4, in_progress=True), unsafe_allow_html=True)
+    query_hashes = generate_hashes(peaks, fan_out=FAN_OUT, min_delta_time=MIN_DELTA_TIME, max_delta_time=MAX_DELTA_TIME)
+    status.markdown(render_steps(4, in_progress=False), unsafe_allow_html=True)
+    time.sleep(STEP_PAUSE)
 
     if not query_hashes:
+        status.empty()
         st.markdown(
             f'<div class="alert-card">{ICON_ALERT}<div>No prominent audio peaks detected. Try recording closer to the speaker.</div></div>',
             unsafe_allow_html=True,
         )
     else:
-        # 4. Match against the fingerprint database (unchanged)
+        # Step 5: database match
+        status.markdown(render_steps(5, in_progress=True), unsafe_allow_html=True)
         match = find_best_match(query_hashes)
         elapsed = time.time() - t0
+        status.markdown(render_steps(6, in_progress=False), unsafe_allow_html=True)
+        time.sleep(STEP_PAUSE)
+        status.empty()
 
         if match:
             offset = match.get("offset_seconds", 0) or 0
