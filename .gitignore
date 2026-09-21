@@ -1,22 +1,29 @@
-# Environments
+# Virtual Environment
 .venv/
+env/
 venv/
 ENV/
 
-# Python cache
+# Python Cache
 __pycache__/
 *.py[cod]
 *$py.class
-.pytest_cache/
+*.so
 
-# Environment variables & secrets
+# Environment Variables & Secrets
 .env
+config_secrets.py
 
-# Large media & debug plots (keep clean repos)
+# Audio Files & Raw Data
+songs/
 *.mp3
 *.wav
 *.flac
-*.png
+*.m4a
+*.ogg
 
-# VS Code settings
+# OS / Editor specific
+.DS_Store
+Thumbs.db
 .vscode/
+.idea/
