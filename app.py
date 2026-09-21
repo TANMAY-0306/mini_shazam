@@ -164,33 +164,31 @@ st.markdown(
         width: 128px; height: 128px; border-radius: 50%;
         background: radial-gradient(circle at 35% 30%, #8B7CF6, #6C5CE7 55%, #4B3FB0 100%);
         box-shadow: 0 8px 28px rgba(108,92,231,0.45), inset 0 1px 1px rgba(255,255,255,0.25);
+        display: flex; align-items: center; justify-content: center;
+        color: #FFFFFF;
     }
-
-    /* Nudge Streamlit's native audio widget to sit inside the round shell,
-       centered and de-chromed. Selector targets Streamlit's testid; if a
-       future Streamlit version renames it, re-inspect via devtools and
-       update this selector. */
-    div[data-testid="stAudioInput"] {
-        display: flex; justify-content: center;
-        margin-top: -190px; /* overlay onto .record-shell above */
-        position: relative; z-index: 3;
-        transform: scale(1.35);
-    }
-    div[data-testid="stAudioInput"] > div {
-        background: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-    }
-    div[data-testid="stAudioInput"] button {
-        color: #FFFFFF !important;
-    }
+    .record-core svg { width: 40px; height: 40px; }
 
     .record-hint {
         text-align: center; color: #6E7492; font-size: 0.85rem;
-        margin-top: 0.4rem; margin-bottom: 2.2rem;
+        margin-top: 1.4rem; margin-bottom: 1.6rem;
         display: flex; align-items: center; justify-content: center; gap: 0.4rem;
     }
     .record-hint svg { color: #6E7492; }
+
+    /* ---------- Native recorder card ----------
+       We do NOT overlay/scale Streamlit's native audio widget onto the
+       decorative circle above — it has its own waveform/play/timer layout
+       that breaks when force-compressed. Instead it gets its own themed
+       card, in normal flow. */
+    div[data-testid="stAudioInput"] {
+        background: rgba(255,255,255,0.035) !important;
+        border: 1px solid rgba(255,255,255,0.08) !important;
+        border-radius: 16px !important;
+        padding: 0.9rem 1.1rem !important;
+        max-width: 460px;
+        margin: 0 auto 0.6rem auto !important;
+    }
 
     /* ---------- Analyzing state ---------- */
     .analyzing-wrap { display: flex; flex-direction: column; align-items: center; margin: 1.6rem 0 2.2rem 0; }
@@ -267,10 +265,8 @@ st.markdown(
 # --------------------------------------------------------------------------
 
 st.markdown(
-    f"""
-    <div class="brand-row">{ICON_LOGO}<p class="brand-title">Sonic</p></div>
-    <p class="brand-sub">Identify any track from your library in seconds</p>
-    """,
+    f'<div class="brand-row">{ICON_LOGO}<p class="brand-title">Sonic</p></div>'
+    f'<p class="brand-sub">Identify any track from your library in seconds</p>',
     unsafe_allow_html=True,
 )
 
@@ -279,15 +275,13 @@ st.markdown(
 # --------------------------------------------------------------------------
 
 st.markdown(
-    """
-    <div class="record-shell">
-        <div class="record-ring ring-1"></div>
-        <div class="record-ring ring-2"></div>
-        <div class="pulse-ring"></div>
-        <div class="pulse-ring delay"></div>
-        <div class="record-core"></div>
-    </div>
-    """,
+    '<div class="record-shell">'
+    '<div class="record-ring ring-1"></div>'
+    '<div class="record-ring ring-2"></div>'
+    '<div class="pulse-ring"></div>'
+    '<div class="pulse-ring delay"></div>'
+    f'<div class="record-core">{ICON_MIC}</div>'
+    '</div>',
     unsafe_allow_html=True,
 )
 
@@ -305,16 +299,14 @@ st.markdown(
 if audio_file is not None:
     status = st.empty()
     status.markdown(
-        """
-        <div class="analyzing-wrap">
-            <div class="analyzing-dot-row">
-                <div class="analyzing-dot"></div>
-                <div class="analyzing-dot"></div>
-                <div class="analyzing-dot"></div>
-            </div>
-            <div class="analyzing-text">Matching fingerprints against your library…</div>
-        </div>
-        """,
+        '<div class="analyzing-wrap">'
+        '<div class="analyzing-dot-row">'
+        '<div class="analyzing-dot"></div>'
+        '<div class="analyzing-dot"></div>'
+        '<div class="analyzing-dot"></div>'
+        '</div>'
+        '<div class="analyzing-text">Matching fingerprints against your library…</div>'
+        '</div>',
         unsafe_allow_html=True,
     )
 
@@ -339,11 +331,9 @@ if audio_file is not None:
 
     if not query_hashes:
         st.markdown(
-            f"""
-            <div class="alert-card">{ICON_ALERT}
-                <div>No prominent audio peaks detected. Try recording closer to the speaker.</div>
-            </div>
-            """,
+            f'<div class="alert-card">{ICON_ALERT}'
+            f'<div>No prominent audio peaks detected. Try recording closer to the speaker.</div>'
+            f'</div>',
             unsafe_allow_html=True,
         )
     else:
@@ -357,36 +347,30 @@ if audio_file is not None:
             duration = match.get("duration_sec")
             album = match.get("album")
 
-            meta_items = f"""
-                <div class="result-meta-item">{ICON_CLOCK}<span>~{mins:02d}:{secs:02d} cue</span></div>
-            """
+            # NOTE: every HTML fragment below is built as ONE continuous line.
+            # Streamlit's markdown renderer treats any line starting with
+            # 4+ spaces as a code block, which is what caused the raw
+            # "<div class=...>" text to render literally in the last version.
+            meta_items = f'<div class="result-meta-item">{ICON_CLOCK}<span>~{mins:02d}:{secs:02d} cue</span></div>'
             if duration:
-                meta_items += f"""
-                <div class="result-meta-item">{ICON_CLOCK}<span>{duration:.0f}s track</span></div>
-                """
+                meta_items += f'<div class="result-meta-item">{ICON_CLOCK}<span>{duration:.0f}s track</span></div>'
             if album:
-                meta_items += f"""
-                <div class="result-meta-item">{ICON_ALBUM}<span>{album}</span></div>
-                """
+                meta_items += f'<div class="result-meta-item">{ICON_ALBUM}<span>{album}</span></div>'
 
-            st.markdown(
-                f"""
-                <div class="result-card">
-                    <div class="result-badge">{ICON_CHECK}</div>
-                    <p class="result-title">{match['title']}</p>
-                    <div class="result-artist">{ICON_ARTIST}<span>{match['artist']}</span></div>
-                    <div class="result-meta-row">{meta_items}</div>
-                </div>
-                <p class="result-timing">Identified in {elapsed:.2f}s</p>
-                """,
-                unsafe_allow_html=True,
+            result_html = (
+                f'<div class="result-card">'
+                f'<div class="result-badge">{ICON_CHECK}</div>'
+                f'<p class="result-title">{match["title"]}</p>'
+                f'<div class="result-artist">{ICON_ARTIST}<span>{match["artist"]}</span></div>'
+                f'<div class="result-meta-row">{meta_items}</div>'
+                f'</div>'
+                f'<p class="result-timing">Identified in {elapsed:.2f}s</p>'
             )
+            st.markdown(result_html, unsafe_allow_html=True)
         else:
             st.markdown(
-                f"""
-                <div class="alert-card">{ICON_ALERT}
-                    <div>No confident match found. Try playing louder or holding the mic closer.</div>
-                </div>
-                """,
+                f'<div class="alert-card">{ICON_ALERT}'
+                f'<div>No confident match found. Try playing louder or holding the mic closer.</div>'
+                f'</div>',
                 unsafe_allow_html=True,
             )
